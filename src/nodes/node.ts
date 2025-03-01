@@ -44,66 +44,91 @@ export async function node(
 
   node.get("/start", async (req, res) => {
     if (killed) {
-      return res.status(500).send("Node is stopped");
+      res.status(500).send("Node is stopped");
+      return;
     }
   
     let round = 0;
   
     while (!nodeState.decided) {
-      await new Promise((resolve) => setTimeout(resolve, 100)); // Simulate round delay
-  
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    
+      if (!nodesAreReady()) continue; // Wait until all nodes are up
+    
       const votes = await gatherVotes(round);
       const majorityVote = getMajorityVote(votes);
-  
+    
       if (majorityVote !== null) {
-        nodeState.x = majorityVote as 0 | 1 | null; // Explicit cast
+        nodeState.x = majorityVote as 0 | 1;
         nodeState.decided = true;
+        await broadcastMessage(round, nodeState.x);
       } else {
         nodeState.x = Math.random() < 0.5 ? 0 : 1;
       }
-      
-  
+    
       round++;
       nodeState.k = round;
     }
-  
     res.status(200).send("Consensus reached");
-    return;
   });
-
+  
+  async function broadcastMessage(round: number, value: 0 | 1) {
+    for (let i = 0; i < N; i++) {
+      if (i !== nodeId) {
+        try {
+          await fetch(`http://localhost:${BASE_NODE_PORT + i}/message`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ round, value }),
+          });
+        } catch (error) {
+          console.error(`Failed to send message to node ${i}:`, error);
+        }
+      }
+    }
+  }
+  
   async function gatherVotes(round: number): Promise<number[]> {
     const votes: number[] = [];
-  
+
     for (let i = 0; i < N; i++) {
-      try {
-        const response = await fetch(`http://localhost:${BASE_NODE_PORT + i}/getState`);
-        const data = await response.json();
-  
-        // Validate that `data` matches NodeState structure
-        if (
+        try {
+            const response = await fetch(`http://localhost:${BASE_NODE_PORT + i}/getState`);
+            const data: unknown = await response.json(); // Treat as unknown first
+
+            if (isValidNodeState(data)) {
+                const nodeState = data as NodeState; // Safe casting after validation
+                
+                if (nodeState.x === 0 || nodeState.x === 1) {
+                    votes.push(nodeState.x);
+                }
+            } else {
+                console.warn(`Invalid response from node ${i}:`, data);
+            }
+        } catch (error) {
+            console.warn(`Node ${i} unresponsive for round ${round}`);
+        }
+    }
+
+    return votes;
+  }
+
+  // ✅ **Helper Function: Check if `data` is a valid `NodeState`**
+  function isValidNodeState(data: any): data is NodeState {
+      return (
           typeof data === "object" &&
           data !== null &&
           "x" in data &&
           "decided" in data &&
           "k" in data &&
-          (data.x === 0 || data.x === 1 || data.x === "?" || data.x === null)
-        ) {
-          const nodeState: NodeState = data as NodeState;
-  
-          if (nodeState.x === 0 || nodeState.x === 1) {
-            votes.push(nodeState.x);
-          }
-        } else {
-          console.warn(`Invalid data received from node ${i}:`, data);
-        }
-      } catch (error) {
-        console.error(`Failed to get state from node ${i}:`, error);
-      }
-    }
-  
-    return votes; // Only returns numbers now
+          "killed" in data &&
+          (data.x === 0 || data.x === 1 || data.x === "?" || data.x === null) &&
+          (typeof data.decided === "boolean" || data.decided === null) &&
+          (typeof data.k === "number" || data.k === null) &&
+          typeof data.killed === "boolean"
+      );
   }
-  
+
   
   function getMajorityVote(votes: number[]): 0 | 1 | null {
     const count0 = votes.filter((v) => v === 0).length;
