@@ -3,17 +3,16 @@ import express from "express";
 import { BASE_NODE_PORT } from "../config";
 import { Value } from "../types";
 
-/**
- * Defines the structure for the state of a node in the consensus algorithm.
- */
+
+// structure of state of node in consensus algorithm
 type NodeState = {
-  killed: boolean; // Indicates if the node is stopped
-  x: 0 | 1 | "?" | null; // The node's current decision value
-  decided: boolean | null; // Whether the node has reached a final decision
-  k: number | null; // Current round number
+  killed: boolean; //  if the node is stopped
+  x: 0 | 1 | "?" | null; // current decision value
+  decided: boolean | null; // final decision or not
+  k: number | null; // current round number
 };
 
-// Function that creates and manages a node in a consensus protocol.
+// function that creates and manages a node in a consensus protocol.
 export async function node(
   nodeId: number,
   N: number,
