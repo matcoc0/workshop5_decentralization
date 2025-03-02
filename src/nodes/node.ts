@@ -13,17 +13,7 @@ type NodeState = {
   k: number | null; // Current round number
 };
 
-/**
- * Function that creates and manages a node in a consensus protocol.
- * 
- * @param nodeId - The ID of the node.
- * @param N - Total number of nodes.
- * @param F - Number of faulty nodes.
- * @param initialValue - The initial value the node starts with.
- * @param isFaulty - Whether the node is faulty or not.
- * @param nodesAreReady - Function to check if all nodes are ready.
- * @param setNodeIsReady - Function to mark a node as ready.
- */
+// Function that creates and manages a node in a consensus protocol.
 export async function node(
   nodeId: number,
   N: number,
@@ -37,12 +27,10 @@ export async function node(
   node.use(express.json());
   node.use(bodyParser.json());
 
-  let killed = false; // Track if the node is stopped
+  let killed = false; // track if the node is stopped
 
-  /**
-   * Node state initialization.
-   * If the node is faulty, it starts with null values.
-   */
+
+  // initialization of node state
   let nodeState: NodeState = {
     killed: false,
     x: isFaulty ? null : (initialValue as 0 | 1 | "?" | null),
@@ -50,24 +38,21 @@ export async function node(
     k: isFaulty ? null : 0,
   };
 
-  /**
-   * Endpoint to check the status of the node.
-   * Returns 200 if the node is live, 500 if it is faulty.
-   */
+
+  // check status of node
   node.get("/status", (req, res) => {
     res.status(isFaulty ? 500 : 200).send(isFaulty ? "faulty" : "live");
   });
 
-  /**
-   * Endpoint to start the consensus process.
-   */
+
+  // start consensus process
   node.get("/start", async (req, res) => {
     if (killed || isFaulty) {
       res.status(500).send("Node is faulty or stopped");
       return;
     }
 
-    // Wait until all nodes are ready before proceeding
+    // wait until all nodes are ready before proceeding
     while (!nodesAreReady()) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
